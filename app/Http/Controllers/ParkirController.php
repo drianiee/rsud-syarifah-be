@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Parkir;
 use App\Models\ParkingSetting;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ParkirController extends Controller
 {
@@ -59,4 +60,77 @@ class ParkirController extends Controller
         $parkir->delete();
         return response()->json(['message' => 'deleted']);
     }
+
+    public function export(Request $request): StreamedResponse
+{
+    $month = $request->integer('month');
+    $year  = $request->integer('year');
+
+    // Filter data berdasarkan bulan/tahun (opsional)
+    $query = Parkir::query();
+    if ($year)  $query->where('tahun', $year);
+    if ($month) $query->where('bulan', $month);
+
+    $parkirs = $query->orderBy('tanggal')->get();
+
+    // Nama file
+    $fileName = 'data_parkir_' . ($month ?: 'all') . '_' . ($year ?: 'all') . '.csv';
+
+    // Streaming response CSV (bisa dibuka di Excel)
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"$fileName\"",
+    ];
+
+    $callback = function () use ($parkirs) {
+        $file = fopen('php://output', 'w');
+        // Header kolom
+        fputcsv($file, [
+            'Tanggal', 'Shift', 'Pendapatan R2', 'Pendapatan R4',
+            'Jumlah R2', 'Jumlah R4', 'Total', 'Bulan', 'Tahun'
+        ]);
+
+        foreach ($parkirs as $p) {
+            fputcsv($file, [
+                $p->tanggal,
+                $p->shift,
+                $p->pendapatan_r2,
+                $p->pendapatan_r4,
+                $p->jumlah_r2,
+                $p->jumlah_r4,
+                $p->total,
+                $p->bulan,
+                $p->tahun,
+            ]);
+        }
+
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+public function totals(Request $request)
+{
+    $month = $request->integer('month');
+    $year  = $request->integer('year');
+
+    $query = Parkir::query();
+    if ($year)  $query->where('tahun', $year);
+    if ($month) $query->where('bulan', $month);
+
+    $data = $query->selectRaw('
+        SUM(pendapatan_r2) as total_r2,
+        SUM(pendapatan_r4) as total_r4,
+        SUM(total) as total_semua
+    ')->first();
+
+    return response()->json([
+        'total_r2'     => (int) ($data->total_r2 ?? 0),
+        'total_r4'     => (int) ($data->total_r4 ?? 0),
+        'total_semua'  => (int) ($data->total_semua ?? 0),
+        'filter_bulan' => $month,
+        'filter_tahun' => $year,
+    ]);
+}
 }

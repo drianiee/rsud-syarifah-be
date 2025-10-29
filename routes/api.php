@@ -10,3 +10,5 @@ Route::delete('/parkir/{parkir}', [ParkirController::class, 'destroy']);
 
 Route::get('/parking-settings', [ParkingSettingController::class, 'show']);
 Route::put('/parking-settings', [ParkingSettingController::class, 'update']);
+Route::get('/parkir/export', [ParkirController::class, 'export']);
+Route::get('/parkir/totals', [ParkirController::class, 'totals']);
